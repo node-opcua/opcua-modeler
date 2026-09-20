@@ -1,0 +1,38 @@
+namespaceUri: http://acme.example/UA/Pump/
+version: 1.0.0
+publicationDate: "2026-01-01T00:00:00Z"
+
+# Companion specifications this model builds on. `ua` (the OPC UA base
+# namespace) is always there; `di` is Device Integration.
+namespaces:
+  - di
+
+objectTypes:
+  - browseName: PumpType
+    subtypeOf: di:DeviceType
+    description: A centrifugal pump.
+    components:
+      # DI keeps process values in the ParameterSet.
+      - browseName: di:ParameterSet
+        components:
+          - browseName: FlowRate
+            typeDefinition: ua:AnalogUnitType
+            dataType: ua:Double
+            engineeringUnits: "m³/h"
+            description: The measured flow.
+          - browseName: SetPoint
+            dataType: ua:Double
+            accessLevel: CurrentRead | CurrentWrite
+            description: The flow the pump is asked to deliver.
+
+instances:
+  - browseName: Pump1
+    typeDefinition: PumpType
+    organizedBy: /ua:Objects
+    initializers:
+      - variable: di:Manufacturer
+        value: "Acme Pumps"
+      - variable: di:Model
+        value: "CP-200"
+      - variable: di:SerialNumber
+        value: "SN-0001"

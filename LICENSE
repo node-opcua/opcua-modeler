@@ -1,0 +1,24 @@
+OPC UA Modeler — public repository
+Copyright (c) 2026 Sterfive SAS
+
+This repository contains material under two licences.
+
+1. specification/
+   Creative Commons Attribution 4.0 International (CC BY 4.0)
+   SPDX-License-Identifier: CC-BY-4.0
+   https://creativecommons.org/licenses/by/4.0/legalcode
+
+   You may share and adapt the specification, including commercially, provided
+   you give appropriate credit to Sterfive SAS, link to the licence, and
+   indicate if changes were made.
+
+2. schema/ and examples/
+   MIT License
+   SPDX-License-Identifier: MIT
+   See LICENSE-MIT.
+
+Everything else in this repository (README, templates) is under the MIT License.
+
+The OPC UA Modeler compiler, language server, command-line tool and web
+application are not part of this repository and are not covered by these
+licences.

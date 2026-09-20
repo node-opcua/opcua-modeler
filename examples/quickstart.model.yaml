@@ -1,0 +1,33 @@
+namespaceUri: http://example.com/UA/Quickstart/
+version: 1.0.0
+publicationDate: "2026-01-01T00:00:00Z"
+
+namespaces:
+  - di
+
+objectTypes:
+  - browseName: TemperatureSensorType
+    subtypeOf: di:ComponentType
+    description: A temperature sensor, modelled as a DI component.
+    components:
+      # DI puts process values in the ParameterSet, which the base type declares
+      # as optional — redeclaring it here makes it mandatory on every instance.
+      - browseName: di:ParameterSet
+        components:
+          - browseName: Temperature
+            typeDefinition: ua:AnalogUnitType
+            dataType: ua:Double
+            engineeringUnits: "°C"
+            description: The measured temperature.
+
+instances:
+  - browseName: Sensor1
+    typeDefinition: TemperatureSensorType
+    organizedBy: /ua:Objects
+    initializers:
+      # di:ComponentType inherits these as mandatory from the DI nameplate
+      # interface, so every instance carries them — give them real values.
+      - variable: di:Manufacturer
+        value: "Acme Instruments"
+      - variable: di:Model
+        value: "TS-100"

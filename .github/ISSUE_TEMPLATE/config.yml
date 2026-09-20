@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://opcua-modeler.doc.sterfive.com/
+    about: The language reference, guides and the diagnostics catalogue
+  - name: Commercial support and licences
+    url: https://www.sterfive.com/en/contact
+    about: Talk to Sterfive

@@ -1,0 +1,44 @@
+namespaceUri: http://sterfive.com/UA/MyRobot/
+version: 1.0.0
+publicationDate: "2023-01-01T12:00:00Z"
+namespaces:
+  - di
+  - robotics
+instances:
+  - browseName: MyRoboticSystemType
+    typeDefinition: robotics:MotionDeviceSystemType
+    organizedBy: /ua:Objects
+    components:
+      - browseName: robotics:MotionDevices
+        components:
+          - browseName: Robot1
+            typeDefinition: robotics:MotionDeviceType
+            components:
+              - browseName: robotics:PowerTrains
+                components:
+                  - browseName: PowerTrain1
+                    typeDefinition: robotics:PowerTrainType
+                    components:
+                      - browseName: Motor1
+                        typeDefinition: robotics:MotorType
+                      - browseName: GearBox1
+                        typeDefinition: robotics:GearType
+                        optionals: [robotics:Pitch]
+                  - browseName: PowerTrain2
+                    typeDefinition: robotics:PowerTrainType
+                  - browseName: PowerTrain3
+                    typeDefinition: robotics:PowerTrainType
+              - browseName: robotics:Axes
+                components:
+                  - browseName: Axis1
+                    typeDefinition: robotics:AxisType
+                  - browseName: Axis2
+                    typeDefinition: robotics:AxisType
+                  - browseName: Axis3
+                    typeDefinition: robotics:AxisType
+                  - browseName: Axis4
+                    typeDefinition: robotics:AxisType
+                  - browseName: Axis5
+                    typeDefinition: robotics:AxisType
+                  - browseName: Axis6
+                    typeDefinition: robotics:AxisType

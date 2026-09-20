@@ -1,0 +1,60 @@
+namespaceUri: http://sterfive.com/UA/doc-examples/state-machine/
+version: 1.0.0
+publicationDate: "2026-05-26T00:00:00Z"
+
+namespaces:
+  - di
+
+# tag::state-machine[]
+stateMachines:
+  - browseName: TemperatureControlStateMachineType
+    subtypeOf: ua:FiniteStateMachineType
+    description: |
+      Controls a temperature sensor: it initialises, measures, and can be halted
+      and resumed.
+    # Promoting an inherited optional makes it mandatory on every instance, so a
+    # client can always read the current state by name.
+    promotedToMandatory:
+      - ua:CurrentState.ua:Name
+      - ua:LastTransition.ua:TransitionTime
+    states:
+      - name: Initializing
+        isInitialState: true
+        value: 0
+        description: |
+          **Initializing** — the sensor is powering up and self-checking.
+      - name: Measuring
+        value: 1
+        description: |
+          **Measuring** — the sensor is acquiring temperature values.
+      - name: Halted
+        value: 2
+        description: |
+          **Halted** — acquisition has been stopped and can be resumed.
+    transitions:
+      - from: Initializing
+        to: Measuring
+        value: 0
+      - from: Measuring
+        to: Halted
+        value: 1
+      - from: Halted
+        to: Measuring
+        value: 2
+# end::state-machine[]
+
+# tag::instance[]
+objectTypes:
+  - browseName: TemperatureSensorType
+    subtypeOf: di:ComponentType
+    description: A temperature sensor driven by a state machine.
+    components:
+      - browseName: ControlState
+        typeDefinition: TemperatureControlStateMachineType
+        description: The state machine controlling this sensor.
+
+instances:
+  - browseName: MyTemperatureSensor
+    typeDefinition: TemperatureSensorType
+    organizedBy: /ua:Objects
+# end::instance[]

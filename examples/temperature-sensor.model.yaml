@@ -1,0 +1,73 @@
+namespaceUri: http://acme.com/UA/TemperatureSensor
+version: 1.0.0
+publicationDate: "2019-01-01T00:00:00Z"
+namespaces:
+  - di  
+objectTypes:
+  - browseName: TemperatureSensorType  
+    subtypeOf: di:DeviceType
+    description: |   
+      The Temperature Sensor 
+
+      ### description
+      
+      This **digital temperature sensor** for __Industry 4.0__  measures the temperature of a physical environment
+      and converts the analog signal to a digital signal that is exposed to OPCUA.
+      The sensor works by using a thermistor or a thermocouple to detect temperature changes,
+      which generate a small electrical signal proportional to the temperature change. 
+      This signal is then amplified and converted to a digital signal using an Analog-to-Digital Converter (ADC) 
+      before being transmitted to the electronic device for processing. 
+      
+      In __Industry 4.0__, the digital temperature sensor is  connected to the Industrial Internet of Things (IIoT) network,
+      trough OPCUA allowing for real-time monitoring and control of temperature-sensitive processes. 
+      
+      The sensor may also incorporate additional features such as data logging, alarms, and remote control capabilities
+      to enhance its functionality in the Industry 4.0 ecosystem.
+
+      <center>
+      <img src="https://www.engineersgarage.com/wp-content/uploads/2019/10/lm35-pin-out_orig-1.png" width="50%" />
+      </center>
+      
+
+    components: 
+      - browseName: di:ParameterSet
+        components:
+          - browseName: Temperature
+            typeDefinition: ua:AnalogItemType
+            dataType: ua:Double
+            engineeringUnits: "°C"
+            description: |
+              The actual temperature
+          - browseName: TemperatureSetpoint
+            dataType: ua:Double
+      - browseName: di:MethodSet
+        methods:
+          - browseName: Calibrate
+            inputArguments:
+              - name: coefficentA
+                dataType: ua:Double 
+                description: the B coefficient used to perform the linear interpolation  `T = A*x + B`
+              - name: coefficentB
+                dataType: ua:Double
+                description: the B coefficient used to perform the linear interpolation  `T = A*x + B`
+            outputArguments:
+              - name: previousCoefA
+                dataType: ua:Double
+              - name: previousCoefB
+                dataType: ua:Double
+            description: |
+               Initiate the calibration of the sensor.
+
+               The Calibrate method initiate the calibrationof the temperature sensor on the physical device.
+
+               This method takes two arguments that define the linear interpolation `T = A*x + B`.
+          - browseName: SetTemperatureSetpoint
+            description: Install the temperature setpoint of the Temperature device
+            inputArguments:
+                - name: Temperature
+                  dataType: ua:Double
+instances:
+   - browseName: TemperatureSensor
+     typeDefinition: TemperatureSensorType
+     organizedBy: /ua:Objects/di:DeviceSet
+
