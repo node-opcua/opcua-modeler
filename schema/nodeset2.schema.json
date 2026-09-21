@@ -8238,6 +8238,18 @@
         "documentation": {
           "description": "Long-form markdown for this node, rendered into the generated documentation. `!include` directives are expanded and headers are re-levelled. Distinct from `description`, which is the OPC UA Description attribute — a single line carried in the address space.\n",
           "type": "string"
+        },
+        "specRef": {
+          "description": "A link into the specification text that defines this node, such as `https://reference.opcfoundation.org/Machinery/v104/docs/8.2`. It is written to the NodeSet2 as the node's `<Documentation>` element and read back by the reverse. Distinct from `documentation`, which is markdown for the generated document and never reaches the NodeSet2. A member copied from a type's member of the same namespace inherits that member's link; `false` says this copy has none.\n",
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "const": false
+            }
+          ]
         }
       }
     },
@@ -8665,6 +8677,7 @@
         "displayName": true,
         "description": true,
         "documentation": true,
+        "specRef": true,
         "nodeClass": true,
         "typeDefinition": true,
         "dataType": true,
@@ -8720,6 +8733,7 @@
         "displayName": true,
         "description": true,
         "documentation": true,
+        "specRef": true,
         "nodeClass": true,
         "nodeId": true,
         "typeDefinition": true,
@@ -8755,6 +8769,7 @@
         "displayName": true,
         "description": true,
         "documentation": true,
+        "specRef": true,
         "nodeClass": true,
         "nodeId": true,
         "typeDefinition": true,
@@ -8823,6 +8838,7 @@
         "displayName": true,
         "description": true,
         "documentation": true,
+        "specRef": true,
         "nodeClass": true,
         "nodeId": true,
         "typeDefinition": true,
@@ -9380,6 +9396,7 @@
             "displayName": true,
             "description": true,
             "documentation": true,
+            "specRef": true,
             "typeDefinition": true,
             "optionals": true,
             "nodeId": true,
@@ -9621,10 +9638,10 @@
                 "description": "The browse name of the transition.\n\nIf not specified, the name will have a default value build from the From State and the To State browse names\nin the form: [FromState.browseName]To<ToState.browseName>.\n"
               },
               "from": {
-                "$ref": "#/$defs/BrowseName"
+                "$ref": "#/$defs/TransitionState"
               },
               "to": {
-                "$ref": "#/$defs/BrowseName"
+                "$ref": "#/$defs/TransitionState"
               },
               "description": {
                 "type": "string"
@@ -9633,6 +9650,18 @@
           }
         }
       }
+    },
+    "TransitionState": {
+      "description": "The state a transition leaves (from) or enters (to).\n\nA bare name is a state of this state machine: `Preoperational`.\n\n`<StateMachineType>.<State>` is a state of another state machine type, which is how a\ntransition enters or leaves a state of a sub state machine:\n`VisionAutomaticModeStateMachineType.Initialized` (OPC 40100-1 MachineVision). The type\ntakes a namespace alias when it belongs to another namespace (`mv:SomeType.Ready`) and\nmust be declared before this state machine.\n",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BrowseName"
+        },
+        {
+          "type": "string",
+          "pattern": "^([A-Za-z0-9]+:)?[A-Z][a-zA-Z0-9]*\\.[A-Z][a-zA-Z0-9]*$"
+        }
+      ]
     }
   }
 }

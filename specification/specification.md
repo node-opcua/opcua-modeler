@@ -557,6 +557,7 @@ VariableTypes.
 | `isAbstract`                | boolean                             | Default `false`.                                                                       |
 | `description`               | localized text                      | Markdown permitted in the long form.                                                   |
 | `documentation`             | string                              | Markdown shown in the rendered docs only.                                              |
+| `specRef`                   | URI, or `false`                     | The node's NodeSet2 `<Documentation>` link. See below.                                 |
 | `nodeId`                    | string NodeId                       | See [§5.4](#nodeid-assignment).                                                        |
 | `defaultInstanceBrowseName` | browse name                         | See [§9.4](#default-instance-browse-name).                                             |
 | `properties`                | array                               | `HasProperty` children. See [§9.1](#aggregate-members).                                |
@@ -574,6 +575,22 @@ VariableTypes.
 | `eventSources`              | array of browse path                | Materialised as `HasEventSource` references.                                           |
 | `eventSourceOf`             | browse path                         | Inverse of `eventSources`.                                                             |
 | `subtypes`                  | array of ObjectType / VariableType  | Inline subtypes. See [§9.5](#inline-subtypes).                                         |
+
+`specRef` is a link into the specification text that defines the node, such as
+`https://reference.opcfoundation.org/Machinery/v104/docs/8.2`. It applies to every
+node (types, members, methods, DataTypes, ReferenceTypes, instances), is written to
+the NodeSet2 as the node's `<Documentation>` element and comes back from the reverse.
+It is not `documentation`, which is Markdown for the rendered documents and never
+reaches the NodeSet2.
+
+A member that states no `specRef` and is the copy of a type's member — a component
+of an instance, or of a member typed by another type — takes the `specRef` of that
+member when both are in the same namespace, and none when the type belongs to
+another namespace. `specRef: false` gives such a copy no link. This is what the
+companion specifications do: over the 33 NodeSets of node-opcua-nodesets a copy of
+a same-namespace member carries the member's link 95 times, none 51 times and
+another link once, and a copy of another namespace's member never carries one
+(0 of 239).
 
 {.props}
 
@@ -1225,6 +1242,52 @@ stateMachines:
         to: LowLow
 ```
 
+### Transitions to a state of a sub state machine
+
+A bare name in `from` or `to` **MUST** be a state declared in the `states` of
+the same state machine. [OPC 10000-16] also lets a transition enter or leave
+a state of a sub state machine, that is a state owned by **another** state
+machine type. Such a state is written `<StateMachineType>.<State>`:
+
+- `<StateMachineType>` is the browse name of the state machine type that
+  declares the state; it takes a namespace alias when that type belongs to
+  another namespace (`mv:VisionAutomaticModeStateMachineType.Initialized`);
+- that type **MUST** already exist: a type of the same document **MUST** be
+  declared before the state machine that refers to it;
+- the `FromState` / `ToState` reference points at the state of that type.
+  The component typed by the sub state machine (`AutomaticModeStateMachine`
+  below) has no such child, which is why the path goes through the type and
+  not through the component;
+- the default transition browse name is still made of the bare state names:
+  `PreoperationalToInitialized` below.
+
+The same form names a state inherited from a supertype, which a subtype does
+not declare again: `from: BaseMachineType.Running`.
+
+```yaml title="Example 15b — a transition into a state of a sub state machine (OPC 40100-1 MachineVision)"
+stateMachines:
+  - browseName: AutomaticModeStateMachineType
+    states: [Initialized, Ready]
+    transitions:
+      - from: Initialized
+        to: Ready
+
+  - browseName: VisionStateMachineType
+    components:
+      - browseName: AutomaticModeStateMachine
+        typeDefinition: AutomaticModeStateMachineType
+    states: [Preoperational, Operational]
+    transitions:
+      - from: Preoperational
+        to: Operational
+      # enters the sub state machine directly in its Initialized state
+      - from: Preoperational
+        to: AutomaticModeStateMachineType.Initialized
+      # leaves it from its Ready state
+      - from: AutomaticModeStateMachineType.Ready
+        to: Preoperational
+```
+
 ## Initializers
 
 The `initializers` array declares default values for existing variables,
@@ -1382,6 +1445,11 @@ transmit data over the network. However:
 :   OPC Foundation, *OPC Unified Architecture — Part 6: Mappings* (defines
     the NodeSet2 / UANodeSet XML schema).
     <https://reference.opcfoundation.org/Core/Part6/>
+
+[OPC 10000-16]
+:   OPC Foundation, *OPC Unified Architecture — Part 16: State Machines*,
+    version 1.05.
+    <https://reference.opcfoundation.org/Core/Part16/v105/docs/>
 
 [YAML 1.2.2]
 :   YAML Language Development Team, *YAML Ain't Markup Language (YAML™)
