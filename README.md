@@ -35,7 +35,7 @@ mandatory member the base types imply.
 | | |
 |---|---|
 | **In your browser** | [opcua-modeler.sterfive.io](https://opcua-modeler.sterfive.io) — editor with completion, live diagnostics, diagrams, and a button that starts a real OPC UA server on your model |
-| **In Visual Studio Code** | [Marketplace extension](https://marketplace.visualstudio.com/items?itemName=sterfive.opcua-modeler) |
+| **In Visual Studio Code** | [Marketplace extension](https://marketplace.visualstudio.com/items?itemName=sterfive.opcua-modeler-extension) |
 | **On the command line and in CI** | [CLI quickstart](https://opcua-modeler.doc.sterfive.com/docs/start/cli) |
 | **From an AI agent** | [MCP server](https://github.com/node-opcua/node-opcua-modeler-mcp-server) — `npx -y node-opcua-modeler-mcp-server` |
 

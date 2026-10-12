@@ -174,6 +174,23 @@ properties:
     type: boolean
     default: false
 
+  typeDictionaryName:
+    description: |
+      With outputBinaryTypeDictionary: the browse name of the two legacy type dictionaries
+      (under OPC Binary and XML Schema). The OPC Foundation's ModelCompiler names them
+      TypeDictionary, the default; older NodeSets name them after the model (Opc.Ua.Di,
+      AutoID), and a model reversed from one keeps that name so that its NodeIds survive.
+    type: string
+    minLength: 1
+
+  xmlTypeDictionaryName:
+    description: |
+      With outputBinaryTypeDictionary: the browse name of the legacy XML Schema dictionary,
+      when it differs from typeDictionaryName (OPC 10000-81 UAFX Data names its binary
+      dictionary Opc.Ua.Fx and its XML one Opc.Ua.FX). Defaults to typeDictionaryName.
+    type: string
+    minLength: 1
+
   ## -----------------------------
   lint:
     description: |
@@ -286,6 +303,27 @@ properties:
     items:
       $ref: "#/$defs/Object"
 
+  permissionSets:
+    description: |
+      Named { rolePermissions, accessRestrictions } that a node takes with
+      permissionSet: <name>, for combinations several nodes share. A node uses a set or
+      writes the keys itself, not both.
+    type: object
+    additionalProperties:
+      $ref: "#/$defs/PermissionSet"
+
+  roles:
+    description: |
+      Roles of this model: instances of RoleType under the server's RoleSet. Each gets the
+      configuration members (Identities, the Applications and Endpoints lists, the methods
+      that edit them), locked to SecurityAdmin with a signed and encrypted channel, as the
+      published NodeSets build theirs. Grant a role permissions on other nodes with
+      rolePermissions: [{ role: <its browseName>, permissions: [...] }].
+    type: array
+    minItems: 1
+    items:
+      $ref: "#/$defs/Role"
+
 $defs:
   NamespaceImport:
     type: object
@@ -339,6 +377,9 @@ $defs:
     - commercialKitchenEquipment
     - di
     - eumabois
+    - fxAc
+    - fxCm
+    - fxData
     - gds
     - glass
     - i4aas
@@ -7658,8 +7699,12 @@ $defs:
     # The namespace-URI alternative is for NamespaceMetadata: OPC 10000-5 gives
     # that object the namespace URI itself as BrowseName, so the PascalCase
     # convention below cannot apply to it. A BrowseName's Name part is an
-    # unrestricted String in OPC UA; the rest of this pattern is our convention.
-    pattern: "^(https?://\\S*$)|^([A-Za-z0-9]+:)?(([A-Z][a-zA-Z0-9]*)$|^(<[A-Z][a-zA-Z0-9°#]*>))$"
+    # unrestricted String in OPC UA; the rest of this pattern is our convention:
+    # PascalCase start (test LSC8), underscores allowed as DSL-E-NAMING-001 does,
+    # so a published spec (Machinery's MachineryItemState_StateMachineType) is not
+    # rejected by the editor. The prefix applies to a placeholder too: a type
+    # redeclares its base type's ua:<OrderedObject>.
+    pattern: "^(https?://\\S*$)|^([A-Za-z0-9]+:)?([A-Z][A-Za-z0-9_]*|<[A-Z][A-Za-z0-9_°#]*>)$"
     description: |
       In OPC UA, a browseName is a string that identifies a node within the address space of an OPC UA server. 
       It is used to navigate through the address space to locate a specific node. 
@@ -7804,6 +7849,129 @@ $defs:
           Makes the structure a StructureWithSubtypedValues; do not combine with isOptional.
 
   #### ----------------------------------------- UANodes
+  Role:
+    type: object
+    additionalProperties: false
+    required: [browseName]
+    ## typing for the shared documentation keys; the whitelist below closes the entry
+    allOf:
+      - $ref: "#/$defs/WithDocumentation"
+    properties:
+      browseName:
+        $ref: "#/$defs/BrowseName"
+      displayName:
+        $ref: "#/$defs/LocalizedText"
+      description:
+        $ref: "#/$defs/LocalizedText"
+      documentation: true
+      specRef: true
+      nodeId:
+        type: string
+      typeDefinition:
+        description: RoleType, or a subtype of it. Defaults to ua:RoleType.
+        type: string
+      componentOf:
+        description: Defaults to the server's RoleSet, /ua:Objects/ua:Server/ua:ServerCapabilities/ua:RoleSet.
+        $ref: "#/$defs/BrowsePath"
+      configurable:
+        description: >
+          false keeps Identities only, without the Applications/Endpoints lists and the
+          methods that edit them. Defaults to true.
+        type: boolean
+      optionals:
+        description: More RoleType members to instantiate, e.g. [ua:CustomConfiguration].
+        type: array
+        items:
+          type: string
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
+  RolePermissions:
+    description: |
+      Who may do what on this node (the RolePermissions attribute, OPC 10000-3 §5.2.9).
+      Each entry names a Role, by the BrowseName of a RoleType instance (`ua:Operator`,
+      `gds:DiscoveryAdmin`, or a role of this model), and the permissions it grants.
+      An empty list grants nothing at all (HasNoPermissions); leaving the key out lets the
+      node inherit the namespace default.
+    type: array
+    items:
+      $ref: "#/$defs/RolePermission"
+  RolePermission:
+    type: object
+    additionalProperties: false
+    required: [role, permissions]
+    properties:
+      role:
+        description: >
+          A RoleType instance: `alias:BrowseName` (resolved among roles only, e.g.
+          `ua:Operator`) or a full browse path.
+        type: string
+      permissions:
+        description: >
+          PermissionType bits, by name (they belong to OPC UA itself and take no namespace
+          prefix), or `[all]`: every permission that applies to the node's NodeClass.
+        oneOf:
+          - type: array
+            items:
+              const: all
+            minItems: 1
+            maxItems: 1
+          - type: array
+            uniqueItems: true
+            items:
+              $ref: "#/$defs/PermissionName"
+  PermissionName:
+    enum:
+      - Browse
+      - ReadRolePermissions
+      - WriteAttribute
+      - WriteRolePermissions
+      - WriteHistorizing
+      - Read
+      - Write
+      - ReadHistory
+      - InsertHistory
+      - ModifyHistory
+      - DeleteHistory
+      - ReceiveEvents
+      - Call
+      - AddReference
+      - RemoveReference
+      - DeleteNode
+      - AddNode
+  AccessRestrictions:
+    description: >
+      How the channel must be secured before this node may be reached (the
+      AccessRestrictions attribute, OPC 10000-3 §5.2.10).
+    type: array
+    uniqueItems: true
+    items:
+      enum: [SigningRequired, EncryptionRequired, SessionRequired, ApplyRestrictionsToBrowse]
+
+  PermissionSet:
+    type: object
+    additionalProperties: false
+    properties:
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
+  ArgumentPermissions:
+    description: >
+      On a method: what its InputArguments and OutputArguments properties carry. Without it
+      they get the method's roles, with Call read as Read and [all] as every Variable
+      permission, and the method's accessRestrictions.
+    type: object
+    additionalProperties: false
+    properties:
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
   BaseNode:
     description: "UABaseNode"
     title: "Generic OPCUA Node"
@@ -7818,6 +7986,13 @@ $defs:
         $ref: "#/$defs/LocalizedText"
       description:
         $ref: "#/$defs/LocalizedText"
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       nodeId:
         type: string
         description: |
@@ -7914,6 +8089,13 @@ $defs:
           browseName: true
           displayName: true
           description: true
+          rolePermissions:
+            $ref: "#/$defs/RolePermissions"
+          permissionSet:
+            description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+            type: string
+          accessRestrictions:
+            $ref: "#/$defs/AccessRestrictions"
           nodeId: true
           ## VariableSpecific
           valueRank: true
@@ -7963,14 +8145,34 @@ $defs:
         type: array
         minItems: 1
         items:
-          #anyOf:
-          # - $ref: "#/$defs/Object"
-          $ref: "#/$defs/InnerObject"
+          anyOf:
+            - $ref: "#/$defs/OrganizesLink"
+            - $ref: "#/$defs/InnerObject"
       methods:
         type: array
         minItems: 1
         items:
           $ref: "#/$defs/MethodDeclaration"
+
+  OrganizesLink:
+    type: string
+    minLength: 1
+    description: |
+      A link to a node that exists elsewhere: an Organizes reference from this entry to it,
+      the short form of a references: entry. In a type, `$Name` is the member of that type
+      whose BrowseName is Name, at any depth (its own members first, then inherited ones), or
+      the member that declares `$anchor: Name`; `/Folder/Name` is a path from the type.
+      Outside types it is a browse path from the entry, `$Name` an instance.
+    examples:
+      - "$Speed"
+      - "/Settings/Speed"
+
+  MemberAnchor:
+    type: string
+    description: >
+      A name for this member in the organizes: links of its type (`$Name`), when its
+      BrowseName alone is ambiguous there.
+    pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
 
   AggregateForType:
     type: "object"
@@ -7998,9 +8200,13 @@ $defs:
           DI FunctionalGroup pattern, used throughout OPC 30500 LADS. The rule
           DSL-W-STRUCT-007 is what says a Property reached only through Organizes is poor
           modelling; the schema's job is to describe what a NodeSet can hold.
+
+          A string item links a node declared elsewhere instead (see OrganizesLink).
         type: array
         items:
-          $ref: "#/$defs/VariableOrObjectForType"
+          anyOf:
+            - $ref: "#/$defs/OrganizesLink"
+            - $ref: "#/$defs/VariableOrObjectForType"
         minItems: 1
 
       methods:
@@ -8286,8 +8492,7 @@ $defs:
         description: |
            the default browse name of the add in instance , if not specified
            then the default browse name specified in the type definition of the add in is used.
-      optionals: 
-        type: array
+      optionals:
         description: >
           a list of BrowseName (without aliases) of the optional components or property to instantiate.
 
@@ -8295,9 +8500,13 @@ $defs:
 
             optionals: [ "Property.ChildProperty", "TopLevelProperty" ]
 
-        items:
-          type: string
-        minItems: 1
+          Can also be specified as a single string, as on any other node.
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+            minItems: 1
   # -----------------------------------------
   WithAddIns:
     type: "object"
@@ -8323,6 +8532,7 @@ $defs:
       - $ref: "#/$defs/WithAddIns"
       - $ref: "#/$defs/WithReferences"
       - $ref: "#/$defs/EventGenerator"
+      - $ref: "#/$defs/WithDocumentation"
     additionalProperties: false
     required: [browseName]
     properties:
@@ -8330,6 +8540,17 @@ $defs:
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
+      nodeId: true
+      ## --- WithDocumentation
+      documentation: true
+      specRef: true
       ## --- base Node for Type
       isAbstract: true
       subtypeOf: true
@@ -8350,21 +8571,20 @@ $defs:
         $ref: "#/$defs/BrowseName"
       ## ---- WithAddIns
       addIns: true
-      ## ---- subtype
-      subtypes:
-        type: array
-        items:
-          $ref: "#/$defs/ObjectType"
-        minItems: 1
       ## 
       generatedEvents: true
       eventSources: true
-      eventSourceOf: true
       ## AdvancedComponentContainment
       orderedComponents: true
       physicalComponents: true
       containedComponents: true
       attachedComponents: true
+      ## >>> extension blocks: ObjectType (generated by tools/merge-extension-schemas.ts, ADR-010)
+      di:
+        $ref: "#/$defs/DiBlock"
+      fx:
+        $ref: "#/$defs/FxBlock"
+      ## <<< extension blocks: ObjectType
 
   EventGenerator:
     type: object
@@ -8375,12 +8595,30 @@ $defs:
         items:
           type: string
       eventSources:
-        description: specify the list of object that are source of event for this node 
-        type: array
-        items:
-          type: string
+        $ref: "#/$defs/EventSources"
+
+  ## HasEventSource (OPC 10000-3 7.17), written like organizedBy / componentOf.
+  ## A type has only eventSources, naming its own members (/Motor): a type node
+  ## is the event source of nothing, so eventSourceOf is an instance key.
+  EventSources:
+    description: >
+      The nodes this node is the event notifier of: one HasEventSource
+      reference from this node to each browse path.
+    type: array
+    minItems: 1
+    items:
+      $ref: "#/$defs/BrowsePath"
+
+  EventSourceLinks:
+    type: object
+    properties:
+      eventSources:
+        $ref: "#/$defs/EventSources"
       eventSourceOf:
-        type: string
+        description: >
+          The browse path of this instance's event notifier: a HasEventSource
+          reference from that node to this one.
+        $ref: "#/$defs/BrowsePath"
 
   ## The UAVariable attributes that describe HOW a value is reached rather
   ## than what it is: accessLevel, userAccessLevel, minimumSamplingInterval,
@@ -8455,13 +8693,29 @@ $defs:
       - $ref: "#/$defs/AggregateForType"
       - $ref: "#/$defs/VariableSpecific"
       - $ref: "#/$defs/WithReferences"
+      - $ref: "#/$defs/WithDocumentation"
+      - $ref: "#/$defs/WithPromotedToMandatory"
+      - $ref: "#/$defs/AdvancedComponentContainment"
     additionalProperties: false
-    required: [browseName, dataType]
+    # dataType is not required: a VariableType without one inherits the DataType
+    # of its subtypeOf, which lives in another type (often another namespace) and
+    # cannot be seen from here. The compiler warns when nothing is inherited.
+    required: [browseName]
     properties:
       # base node
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
+      nodeId: true
+      documentation: true
+      specRef: true
 
       # base node for type
       isAbstract: true
@@ -8485,12 +8739,12 @@ $defs:
       # no exposesItsArray: it sets the modelling rule of a member Variable,
       # and a VariableType entry has none
 
-      ## ---- subtype
-      subtypes:
-        type: array
-        items:
-          $ref: "#/$defs/VariableType"
-        minItems: 1
+      # read by addVariableType like on an ObjectType (OPC 30500 ADI, Scales)
+      promotedToMandatory: true
+      orderedComponents: true
+      physicalComponents: true
+      containedComponents: true
+      attachedComponents: true
 
   ArgumentArray:
     type: array
@@ -8528,6 +8782,13 @@ $defs:
         $ref: "#/$defs/LocalizedText"
       description:
         $ref: "#/$defs/LocalizedText"
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       nodeId:
         description: >
           Optional explicit NodeId (e.g. `s=Calibrate`). When omitted the
@@ -8536,6 +8797,8 @@ $defs:
         type: string
       executable:
         type: boolean
+      argumentPermissions:
+        $ref: "#/$defs/ArgumentPermissions"
       inputArguments:
         $ref: "#/$defs/ArgumentArray"
       outputArguments:
@@ -8580,9 +8843,18 @@ $defs:
       - $ref: "#/$defs/ModellingRuleProp"
     properties:
       ## Variable
+      $anchor:
+        $ref: "#/$defs/MemberAnchor"
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       documentation: true
       specRef: true
       nodeClass: true
@@ -8621,17 +8893,29 @@ $defs:
       - $ref: "#/$defs/WithPromotedToMandatory"
       - $ref: "#/$defs/WithReferences"
       - $ref: "#/$defs/WithDocumentation"
+      - $ref: "#/$defs/AdvancedComponentContainment"
+      - $ref: "#/$defs/WithOptionals"
 
     properties:
+      $anchor:
+        $ref: "#/$defs/MemberAnchor"
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       documentation: true
       specRef: true
       nodeClass: true
       nodeId: true
       typeDefinition: true
       modellingRule: true
+      optionals: true
       ## for nested structure
       components: true
       organizes: true
@@ -8640,6 +8924,11 @@ $defs:
       interfaces: true
       promotedToMandatory: true
       methods: true
+      ## AdvancedComponentContainment: read by the loader at every level
+      orderedComponents: true
+      physicalComponents: true
+      containedComponents: true
+      attachedComponents: true
 
   VariableForType:
     type: object
@@ -8653,9 +8942,18 @@ $defs:
       ## - $ref: "#/$defs/ModellingRuleProp"
     properties:
       ## Variable
+      $anchor:
+        $ref: "#/$defs/MemberAnchor"
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       documentation: true
       specRef: true
       nodeClass: true
@@ -8707,16 +9005,31 @@ $defs:
       - $ref: "#/$defs/WithPromotedToMandatory"
       - $ref: "#/$defs/WithReferences"
       - $ref: "#/$defs/WithDocumentation"
+      - $ref: "#/$defs/AdvancedComponentContainment"
     properties:
+      $anchor:
+        $ref: "#/$defs/MemberAnchor"
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       documentation: true
       specRef: true
       nodeClass: true
       nodeId: true
       typeDefinition: true
       promotedToMandatory: true
+      ## AdvancedComponentContainment: read by the loader at every level
+      orderedComponents: true
+      physicalComponents: true
+      containedComponents: true
+      attachedComponents: true
       # WithOptionals
       optionals: true
       ## for variable
@@ -8762,16 +9075,30 @@ $defs:
     allOf:
       - $ref: "#/$defs/MethodDeclaration"
       - $ref: "#/$defs/ModellingRuleProp"
+      - $ref: "#/$defs/WithDocumentation"
     properties:
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
+      documentation: true
+      specRef: true
       nodeId: true
       executable: true
+      argumentPermissions:
+        $ref: "#/$defs/ArgumentPermissions"
       inputArguments: true
       outputArguments: true
       modellingRule: true
 
+  ## No nodeClass: everything under `methods:` is a Method, so the key could
+  ## only restate it. (Under `organizes:`, which mixes node classes, it is needed.)
   MethodForType:
     type: object
     additionalProperties: false
@@ -8779,14 +9106,26 @@ $defs:
     allOf:
       - $ref: "#/$defs/MethodDeclaration"
       - $ref: "#/$defs/ModellingRuleProp"
+      - $ref: "#/$defs/WithDocumentation"
     properties:
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
+      documentation: true
+      specRef: true
       nodeId: true
       modellingRule: true
       ##
       executable: true
+      argumentPermissions:
+        $ref: "#/$defs/ArgumentPermissions"
       inputArguments: true
       outputArguments: true
 
@@ -8807,11 +9146,21 @@ $defs:
       ## allow. Without this branch DataTypeBasic matched ANY object carrying a
       ## browseName, which made it a catch-all that silently accepted typos and
       ## rescued malformed entries from the other two flavours.
+      - $ref: "#/$defs/WithDocumentation"
       - type: object
         properties:
           browseName: true
           displayName: true
           description: true
+          rolePermissions:
+            $ref: "#/$defs/RolePermissions"
+          permissionSet:
+            description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+            type: string
+          accessRestrictions:
+            $ref: "#/$defs/AccessRestrictions"
+          documentation: true
+          specRef: true
           nodeId: true
           subtypeOf: true
           isAbstract: true
@@ -8835,19 +9184,99 @@ $defs:
     description: Enumeration.
     allOf:
       - $ref: "#/$defs/BaseNodeForType"
+      - $ref: "#/$defs/WithDocumentation"
       - properties:
           browseName: true
           displayName: true
           description: true
+          rolePermissions:
+            $ref: "#/$defs/RolePermissions"
+          permissionSet:
+            description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+            type: string
+          accessRestrictions:
+            $ref: "#/$defs/AccessRestrictions"
+          documentation: true
+          specRef: true
           nodeId: true
           isAbstract: true
           subtypeOf:
             enum: [ua:Enumeration]
           enum:
             $ref: "#/$defs/EnumerationDefinition"
+          enumProperty:
+            description: >
+              The Property that publishes the members. By default EnumStrings when
+              the values are 0, 1, 2, … in order and no member has a description or
+              a displayName of its own, EnumValues otherwise. EnumStrings keeps the
+              descriptions in the DataTypeDefinition only.
+            enum: [EnumStrings, EnumValues]
         type: object
         required: ["enum"]
         additionalProperties: false
+
+  ## OPC 10000-3 5.8, the UInteger form: a bit mask. Each value is the mask of
+  ## one bit (1, 2, 4, 8, ...) so values combine with |; the NodeSet stores the
+  ## bit position. The loader checks what a schema cannot: one bit per value,
+  ## no bit twice, and every bit within the width of subtypeOf.
+  DataTypeOptionSet:
+    description: >
+      An OptionSet: a bit mask whose bits are named in enum. Each enum value is
+      the mask of one bit (1, 2, 4, 8, ...); without values the masks follow
+      the order of the list.
+    allOf:
+      - $ref: "#/$defs/BaseNodeForType"
+      - $ref: "#/$defs/WithDocumentation"
+      - properties:
+          browseName: true
+          displayName: true
+          description: true
+          rolePermissions:
+            $ref: "#/$defs/RolePermissions"
+          permissionSet:
+            description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+            type: string
+          accessRestrictions:
+            $ref: "#/$defs/AccessRestrictions"
+          documentation: true
+          specRef: true
+          nodeId: true
+          isAbstract: true
+          isOptionSet:
+            const: true
+          subtypeOf:
+            description: >
+              the unsigned integer that holds the mask (ua:Byte, ua:UInt16,
+              ua:UInt32, ua:UInt64 or a subtype of one), defaults to ua:UInt32;
+              or ua:OptionSet (or a subtype), the Structure whose ByteStrings
+              hold any number of bits
+            $ref: "#/$defs/DataTypeRef"
+          enum:
+            oneOf:
+              - $ref: "#/$defs/EnumerationDefinitionAsStringList"
+              - type: array
+                items:
+                  $ref: "#/$defs/OptionSetField"
+        type: object
+        required: [isOptionSet, enum]
+        additionalProperties: false
+
+  OptionSetField:
+    type: object
+    properties:
+      name:
+        type: string
+      value:
+        description: the mask of this bit, a power of two (1, 2, 4, 8, ...)
+        type: integer
+        minimum: 1
+      displayName:
+        description: the text of this bit in OptionSetValues; defaults to name
+        $ref: "#/$defs/LocalizedText"
+      description:
+        $ref: "#/$defs/LocalizedText"
+    required: [name]
+    additionalProperties: false
 
   DataTypeStructure:
     allOf:
@@ -8886,10 +9315,20 @@ $defs:
             items:
               $ref: "#/$defs/StructureField"
             minItems: 0
+      - $ref: "#/$defs/WithDocumentation"
       - properties:
           browseName: true
           displayName: true
           description: true
+          rolePermissions:
+            $ref: "#/$defs/RolePermissions"
+          permissionSet:
+            description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+            type: string
+          accessRestrictions:
+            $ref: "#/$defs/AccessRestrictions"
+          documentation: true
+          specRef: true
           nodeId: true
           isAbstract: true
           subtypeOf: true
@@ -8923,10 +9362,16 @@ $defs:
   DataType:
     if:
       type: object
-      required: [enum]
+      required: [isOptionSet]
     then:
-      $ref: "#/$defs/DataTypeEnumeration"
+      $ref: "#/$defs/DataTypeOptionSet"
     else:
+     if:
+      type: object
+      required: [enum]
+     then:
+      $ref: "#/$defs/DataTypeEnumeration"
+     else:
       if:
         type: object
         ## `fields` is the structure's own discriminator, but isUnion and
@@ -8949,12 +9394,23 @@ $defs:
     type: object
     allOf:
       - $ref: "#/$defs/BaseNodeForType"
+      - $ref: "#/$defs/WithDocumentation"
       - type: object
         properties:
           # base node
           browseName: true
           displayName: true
           description: true
+          rolePermissions:
+            $ref: "#/$defs/RolePermissions"
+          permissionSet:
+            description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+            type: string
+          accessRestrictions:
+            $ref: "#/$defs/AccessRestrictions"
+          documentation: true
+          specRef: true
+          nodeId: true
           # base node for type
           isAbstract: true
           subtypeOf: true
@@ -8978,6 +9434,12 @@ $defs:
         type: string
       referenceType:
         type: string
+      isForward:
+        description: >
+          Direction of the reference. true (the default): source -> target;
+          false: target -> source, i.e. the inverse reference.
+        type: boolean
+        default: true
 
   Variant:
     oneOf:
@@ -9039,11 +9501,26 @@ $defs:
       - $ref: "#/$defs/WithPromotedToMandatory"
       - $ref: "#/$defs/WithOptionals"
       - $ref: "#/$defs/WithPropertyValues"
+      - $ref: "#/$defs/WithDocumentation"
     properties:
       ## ---  base Node
+      $anchor:
+        $ref: "#/$defs/MemberAnchor"
       browseName: true
       displayName: true
       description: true
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
+      documentation: true
+      specRef: true
+      # organizes: mixes node classes, so an untyped entry says which one it is
+      nodeClass:
+        enum: [Object, Variable, Method]
       typeDefinition: true
       promotedToMandatory: true
       ## --- variable specific
@@ -9126,7 +9603,19 @@ $defs:
     allOf:
       - $ref: "#/$defs/InstanceStuff"
       - $ref: "#/$defs/Aggregate"
-      - $ref: "#/$defs/ConnectedObject"
+      # the placement and the typeDefinition, unless a DSL extension block may supply them: the
+      # expansion runs before compilation, and the compiler still requires both (ADR-010)
+      - if:
+          anyOf:
+            ## >>> extension required: Instance
+            - required: [di]
+            - required: [fx]
+            ## <<< extension required: Instance
+        then: {}
+        else:
+          allOf:
+            - $ref: "#/$defs/ConnectedObject"
+            - required: [typeDefinition]
       - $ref: "#/$defs/WithTypeDefinition"
       - $ref: "#/$defs/WithOptionals"
       - $ref: "#/$defs/WithInterfaces"
@@ -9136,16 +9625,24 @@ $defs:
       - $ref: "#/$defs/WithAddIns"
       - $ref: "#/$defs/WithReferences"
       - $ref: "#/$defs/WithDocumentation"
+      - $ref: "#/$defs/EventSourceLinks"
       - type: object
         description: describe a OPCUA Object instance. 2
         additionalProperties: false
-        required: [browseName, typeDefinition]
+        required: [browseName]
         properties:
           ## --- instance stuff
           $anchor: true
           browseName: true
           displayName: true
           description: true
+          rolePermissions:
+            $ref: "#/$defs/RolePermissions"
+          permissionSet:
+            description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+            type: string
+          accessRestrictions:
+            $ref: "#/$defs/AccessRestrictions"
           documentation: true
           specRef: true
           typeDefinition: true
@@ -9164,6 +9661,9 @@ $defs:
           orderedComponentOf: true
           physicalComponentOf: true
           containedComponentOf: true
+          ## ---- event notifier hierarchy
+          eventSources: true
+          eventSourceOf: true
           ## --- aggregates
           addIns: true
           ## When instance is a Variable (see VariableFacet)
@@ -9181,6 +9681,19 @@ $defs:
           initializers: true
           # With Property Values
           propertyValues: true
+          modellingRule:
+            description: >
+              Only for a member of a type that an instance declaration of that type organizes
+              (OPC 10000-81 UAFX AC FunctionalEntityType/ConfigurationData organizes Configuration
+              and Tuning): with organizedBy naming that declaration, the entry is built as one of
+              its organizes, and takes it as ParentNodeId. A real instance carries no modelling rule.
+            enum: [Mandatory, Optional]
+          ## >>> extension blocks: Instance (generated by tools/merge-extension-schemas.ts, ADR-010)
+          di:
+            $ref: "#/$defs/DiBlock"
+          fx:
+            $ref: "#/$defs/FxBlock"
+          ## <<< extension blocks: Instance
 
   InstanceStuff:
     type: object
@@ -9195,6 +9708,13 @@ $defs:
         pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
       browseName:
         $ref: "#/$defs/BrowseName"
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       nodeId:
         $ref: "#/$defs/NodeIdWithoutNamespace"
       displayName:
@@ -9286,6 +9806,7 @@ $defs:
   # Variable initializes
   Initializer:
     type: object
+    additionalProperties: false
     required:
       - variable
       - value
@@ -9303,13 +9824,39 @@ $defs:
         items:
           type: number
       description:
+        description: >
+          The Description attribute of the Variable the initializer writes to
+          (every OPC UA node has one); it replaces the one the type gave it.
         type: string
 
   StateMachine:
     type: object
     additionalProperties: false
     required: [browseName, states, transitions]
+    ## Typing only for the keys shared with other types; the whitelist below
+    ## is what closes the entry.
+    allOf:
+      - $ref: "#/$defs/WithDocumentation"
+      - $ref: "#/$defs/WithReferences"
     properties:
+      documentation: true
+      specRef: true
+      # extra references, as on any type: the reverse writes the HasCause from a
+      # transition to the method that causes it here (OPC 40010 Robotics, PackML, ...)
+      references: true
+      # one GeneratesEvent reference per entry, as on an ObjectType.
+      # Not via EventGenerator: that would bring eventSources/eventSourceOf too.
+      generatedEvents:
+        description: the Event types this state machine generates (GeneratesEvent references)
+        type: array
+        items:
+          type: string
+      properties:
+        description: VariableForType - the state machine's own properties, referenced by "HasProperty".
+        type: array
+        minItems: 1
+        items:
+          $ref: "#/$defs/VariableForType"
       promotedToMandatory: 
         $ref: "#/$defs/PromotedToMandatoryInner" 
       browseName:
@@ -9318,6 +9865,13 @@ $defs:
         type: string
       description:
         type: string
+      rolePermissions:
+        $ref: "#/$defs/RolePermissions"
+      permissionSet:
+        description: The name of a permissionSets entry, in place of rolePermissions and accessRestrictions.
+        type: string
+      accessRestrictions:
+        $ref: "#/$defs/AccessRestrictions"
       nodeId:
         type: string
       subtypeOf:
@@ -9416,3 +9970,270 @@ $defs:
       - $ref: "#/$defs/BrowseName"
       - type: string
         pattern: "^([A-Za-z0-9]+:)?[A-Z][a-zA-Z0-9]*\\.[A-Z][a-zA-Z0-9]*$"
+
+  ## >>> extension $defs (generated by tools/merge-extension-schemas.ts, ADR-010)
+  ## from opcua-modeler-ext-di/schema/di.schema.yml
+  DiBlock:
+    description: >
+      What this entry is in the Devices model (OPC 10000-100), expanded into plain DSL before compilation. On a type, the
+      kind picks the DI base type (subtypeOf when the entry states none); on an instance, the block takes values
+      (nameplate, parameters) and places the instance in DeviceSet when the entry states no placement.
+    type: object
+    minProperties: 1
+    maxProperties: 1
+    additionalProperties: false
+    properties:
+      device:
+        description: a di:DeviceType subtype (§4.7); its eight nameplate Properties are Mandatory
+        $ref: '#/$defs/DiTopologyElement'
+      component:
+        description: a di:ComponentType subtype (§4.6)
+        $ref: '#/$defs/DiTopologyElement'
+      block:
+        description: a di:BlockType subtype (§4.11)
+        $ref: '#/$defs/DiTopologyElement'
+      topologyElement:
+        description: a di:TopologyElementType subtype (§4.3)
+        $ref: '#/$defs/DiTopologyElement'
+  DiTopologyElement:
+    type: object
+    additionalProperties: false
+    properties:
+      parameters:
+        description: 'The Variables of di:ParameterSet (§4.3), written as under components:'
+        type: array
+        items:
+          type: object
+          required:
+            - browseName
+      methods:
+        description: 'The Methods of di:MethodSet (§4.3), written as under methods:'
+        type: array
+        items:
+          type: object
+          required:
+            - browseName
+      groups:
+        description: >-
+          FunctionalGroups (§4.4), each with its browseName and the members it organizes: names of parameters, methods or
+          nameplate Properties, or a /path. Configuration, Tuning, Maintenance, Diagnostics, Statistics, Status,
+          Operational and OperationCounters take the DI namespace.
+        type: array
+        items:
+          type: object
+          required:
+            - browseName
+            - members
+          additionalProperties: false
+          properties:
+            browseName:
+              type: string
+            members:
+              $ref: '#/$defs/DiMembers'
+            optional:
+              description: the group may be hidden on an instance (ModellingRule Optional, §4.4.1)
+              type: boolean
+      identification:
+        description: The members of the di:Identification FunctionalGroup, e.g. Manufacturer, SerialNumber (§4.4.2)
+        $ref: '#/$defs/DiMembers'
+      nameplate:
+        description: >-
+          On a type, the Optional nameplate Properties to make Mandatory (e.g. ProductCode); on an instance, their values
+          as entries (browseName, value)
+        type: array
+        items:
+          anyOf:
+            - $ref: '#/$defs/DiNameplateName'
+            - type: object
+              required:
+                - browseName
+                - value
+              additionalProperties: false
+              properties:
+                browseName:
+                  $ref: '#/$defs/DiNameplateName'
+                value: {}
+      lock:
+        description: The di:Lock LockingServices Object made present (§7)
+        type: boolean
+  DiNameplateName:
+    type: string
+    enum:
+      - Manufacturer
+      - ManufacturerUri
+      - Model
+      - ProductCode
+      - HardwareRevision
+      - SoftwareRevision
+      - DeviceRevision
+      - DeviceManual
+      - DeviceClass
+      - SerialNumber
+      - ProductInstanceUri
+      - RevisionCounter
+      - AssetId
+      - ComponentName
+  DiMembers:
+    type: array
+    items:
+      type: string
+  ## from opcua-modeler-ext-fx/schema/fx.schema.yml
+  FxBlock:
+    description: >
+      What this entry is in OPC UA FX (OPC 10000-81), expanded into plain DSL before compilation: a functionalEntity or an
+      asset (on a type), an automationComponent (on a type or an instance). An instance may also state its links, hostedBy
+      and executingOn, on their own or beside it.
+    type: object
+    minProperties: 1
+    additionalProperties: false
+    properties:
+      functionalEntity:
+        $ref: '#/$defs/FxFunctionalEntity'
+      automationComponent:
+        $ref: '#/$defs/FxAutomationComponent'
+      asset:
+        $ref: '#/$defs/FxAsset'
+      hostedBy:
+        description: >-
+          The environments this instance needs to run (IsHostedBy, OPC 10000-23 §4.11), e.g. $MyAsset: one path or a list,
+          all of them necessary
+        $ref: '#/$defs/FxTargets'
+      executingOn:
+        description: Where this instance currently executes (IsExecutingOn, OPC 10000-23 §4.3), e.g. $MyAsset
+        $ref: '#/$defs/FxTargets'
+  FxTargets:
+    anyOf:
+      - type: string
+      - type: array
+        minItems: 1
+        items:
+          type: string
+  FxFunctionalEntity:
+    description: A FunctionalEntityType subtype (OPC 10000-81 §6.4) and its data.
+    type: object
+    additionalProperties: false
+    properties:
+      author:
+        description: The identification a client verifies (AuthorUri, AuthorAssignedIdentifier, AuthorAssignedVersion).
+        type: object
+        additionalProperties: false
+        properties:
+          uri:
+            type: string
+          identifier:
+            type: string
+          version:
+            description: Major.Minor.Build.SubBuild, e.g. 1.0.0.0
+            type: string
+            pattern: ^\d+\.\d+\.\d+\.\d+$
+      inputs:
+        description: The Variables of InputData
+        $ref: '#/$defs/FxData'
+      outputs:
+        description: The Variables of OutputData
+        $ref: '#/$defs/FxData'
+      configuration:
+        description: The Variables of ConfigurationData
+        $ref: '#/$defs/FxData'
+      publisherCapabilities:
+        description: Optionals of OutputData's PublisherCapabilities, e.g. PreconfiguredDataSetOnly
+        type: array
+        items:
+          type: string
+      subscriberCapabilities:
+        description: Optionals of InputData's SubscriberCapabilities
+        type: array
+        items:
+          type: string
+      controlGroups:
+        description: The ControlGroups (OPC 10000-81 §6.5), each with its browseName
+        type: array
+        items:
+          $ref: '#/$defs/FxControlGroup'
+  FxData:
+    description: >-
+      The Variables of a data folder, written as under components:. An entry with components: and no dataType is a nested
+      group folder.
+    type: array
+    items:
+      type: object
+      required:
+        - browseName
+      properties:
+        browseName:
+          type: string
+  FxControlGroup:
+    type: object
+    required:
+      - browseName
+    additionalProperties: false
+    properties:
+      browseName:
+        type: string
+      restrict:
+        description: Items only the owner of the group may use (ListToRestrict)
+        type: array
+        items:
+          type: string
+      block:
+        description: Items nobody may use while the group is controlled (ListToBlock)
+        type: array
+        items:
+          type: string
+      related:
+        description: Items that belong to the group (ListOfRelated)
+        type: array
+        items:
+          type: string
+  FxAutomationComponent:
+    description: An AutomationComponent (OPC 10000-81 §6.2), its FunctionalEntities and Assets.
+    type: object
+    additionalProperties: false
+    properties:
+      functionalEntities:
+        $ref: '#/$defs/FxMembers'
+      assets:
+        $ref: '#/$defs/FxMembers'
+  FxMembers:
+    description: Entries written as instances (browseName, typeDefinition, optionals, ...), with their links
+    type: array
+    items:
+      type: object
+      required:
+        - browseName
+      properties:
+        browseName:
+          type: string
+        typeDefinition:
+          type: string
+        hostedBy:
+          description: The Assets of this AutomationComponent that host the FunctionalEntity (IsHostedBy)
+          $ref: '#/$defs/FxTargets'
+        executingOn:
+          description: The Assets the FunctionalEntity executes on (IsExecutingOn)
+          $ref: '#/$defs/FxTargets'
+  FxAsset:
+    description: An FxAssetType subtype (OPC 10000-81 §6.3).
+    type: object
+    additionalProperties: false
+    properties:
+      nameplate:
+        description: The di nameplate properties the type makes Mandatory, e.g. Manufacturer
+        type: array
+        items:
+          type: string
+      builtIn:
+        description: Built-in Assets (HasBuiltInAsset), written as instances with their browseName and typeDefinition
+        type: array
+        items:
+          type: object
+          required:
+            - browseName
+      connectors:
+        description: AssetConnectors, each with its browseName (typeDefinition fxAc:AssetConnectorType when absent)
+        type: array
+        items:
+          type: object
+          required:
+            - browseName
+  ## <<< extension $defs

@@ -311,8 +311,8 @@ The following aliases are reserved by this specification and resolve to
 companion-spec namespaces published by the OPC Foundation. A document
 **MUST NOT** use any of them as a custom `imports[].alias`.
 
-`adi`, `amb`, `autoId`, `cnc`, `commercialKitchenEquipment`, `di`, `gds`,
-`glass`, `ia`, `ijtBase`, `iolink`, `iolinkIODD`, `irdi`,
+`adi`, `amb`, `autoId`, `cnc`, `commercialKitchenEquipment`, `di`, `fxAc`,
+`fxCm`, `fxData`, `gds`, `glass`, `ia`, `ijtBase`, `iolink`, `iolinkIODD`, `irdi`,
 `isa95JobControl`, `machinery`, `machineryJobs`, `machineryProcessValues`,
 `machineryResult`, `machineTool`, `machineVision`, `metalForming`,
 `packML`, `padim`, `robotics`, `standard`, `surfaceTechnologyGeneralTypes`,
@@ -326,17 +326,32 @@ Numeric NodeIds **SHOULD NOT** be authored by hand. A Conformant Processor
 stable across regenerations.
 
 When required (for example to interoperate with an external system that
-hard-codes a NodeId), a node **MAY** declare an explicit `nodeId` string
-matching one of:
+hard-codes a NodeId), a top-level instance **MAY** declare an explicit
+`nodeId` string matching one of:
 
 - `s=<string>` — string NodeId.
 - `g=<uuid>` — GUID NodeId.
 - `b=<base64>` — opaque NodeId.
 
 The namespace prefix `ns=<index>;` **MUST NOT** appear: the namespace is
-fixed by the own namespace. When a parent declares a string `nodeId`,
-descendants whose NodeId is not explicitly stated **SHOULD** derive a
-string NodeId from the parent (e.g. `s=MyMachine-Child1`).
+fixed by the own namespace. When an instance declares a string `nodeId`,
+every node materialised below it, by instantiation of its type or inline,
+derives its string NodeId from its parent's, joined by `-`:
+
+```yaml title="Example 1b — an instance with a string NodeId"
+instances:
+  - browseName: Foo
+    typeDefinition: FooType
+    organizedBy: /ua:Objects
+    nodeId: s=Foo          # Foo            → ns=1;s=Foo
+                           # its Motor      → ns=1;s=Foo-Motor
+                           # Motor's Speed  → ns=1;s=Foo-Motor-Speed
+```
+
+`nodeId` is an instance key. The members of an instance are created by
+instantiation and have no entry of their own to carry one; types, their
+members and DataTypes take the numeric NodeIds of the symbol table. A
+`nodeId` written anywhere but on a top-level instance is not applied.
 
 ### Localized text
 
@@ -397,7 +412,7 @@ imports:
 
 DataTypes describe the structure of Variant values, as defined in
 [OPC 10000-3] §5.8. A DataType definition **MUST** declare `browseName`. It
-**MAY** declare any of `subtypeOf`, `isAbstract`, `description`, `nodeId`,
+**MAY** declare any of `subtypeOf`, `isAbstract`, `description`,
 plus the kind-specific properties below. The kind of a DataType is inferred
 from the keys present, as defined in §7.1–§7.5.
 
@@ -470,9 +485,49 @@ A Structure with `isUnion: true` denotes a discriminated Union as defined in
 
 ### Option set
 
-A Structure with `isOptionSet: true` denotes an OptionSet DataType (a
-structured bit-mask) as defined in [OPC 10000-3] §5.8.5. `isUnion` and
-`isOptionSet` **MUST NOT** both be true on the same DataType.
+A DataType with `isOptionSet: true` is an OptionSet: a bit mask, in the
+UInteger form of [OPC 10000-3] §5.8. Its `subtypeOf` **MUST** be `ua:Byte`,
+`ua:UInt16`, `ua:UInt32` or `ua:UInt64` (or a subtype of one), and
+defaults to `ua:UInt32`. Its `enum` names the bits, with the same two
+forms as an Enumeration, but each `value` is the **mask** of one bit (1, 2,
+4, 8, …), so that values combine with `|`. Without values, the masks follow
+the order of the list.
+
+```yaml title="Example 4b — an OptionSet"
+dataTypes:
+  - browseName: PermissionsType
+    subtypeOf: ua:UInt32
+    isOptionSet: true
+    enum:
+      - name: Read
+        value: 1
+      - name: Write
+        value: 2
+      - name: Execute
+        value: 8
+        displayName: Run
+```
+
+A Conformant Processor **MUST** reject a `value` that is not a single bit,
+two entries on the same bit, a bit beyond the width of `subtypeOf`, and an
+OptionSet that also declares `fields` or `isUnion`. It **MUST** also reject
+an `enum` on an unsigned integer that does not declare `isOptionSet`.
+
+In the NodeSet, the `Definition` carries `IsOptionSet="true"` and each
+field's `Value` is the **bit position** (the mask 8 is `Value="3"`), as in
+the standard's own AccessLevelType. The DataType gets an `OptionSetValues`
+Property: one LocalizedText per bit, the entry's `displayName` or else its
+`name`, with an empty text for a bit the OptionSet does not use.
+
+A value of an OptionSet DataType (in `value`, `propertyValues` or an
+initializer) **MAY** be written as its flag names combined with `|`
+(`Read | Write`), as a list of names, or as the number itself. This holds
+for the OptionSets of imported namespaces too (`ua:AccessLevelType`:
+`CurrentRead | CurrentWrite`). A processor **MUST** reject a name that is
+not a flag, and a number that sets a bit no flag defines.
+
+The structured form of §5.8 (a subtype of the `ua:OptionSet` Structure,
+with value and validBits) is not expressed by this key.
 
 ### Companion VariableType
 
@@ -558,7 +613,6 @@ VariableTypes.
 | `description`               | localized text                      | Markdown permitted in the long form.                                                   |
 | `documentation`             | string                              | Markdown shown in the rendered docs only.                                              |
 | `specRef`                   | URI, or `false`                     | The node's NodeSet2 `<Documentation>` link. See below.                                 |
-| `nodeId`                    | string NodeId                       | See [§5.4](#nodeid-assignment).                                                        |
 | `defaultInstanceBrowseName` | browse name                         | See [§9.4](#default-instance-browse-name).                                             |
 | `properties`                | array                               | `HasProperty` children. See [§9.1](#aggregate-members).                                |
 | `components`                | array                               | `HasComponent` children.                                                               |
@@ -571,10 +625,8 @@ VariableTypes.
 | `interfaces`                | array                               | InterfaceTypes implemented by this type. See [§11](#interfacetypes).                   |
 | `addIns`                    | array                               | Add-Ins. See [§12](#add-ins).                                                          |
 | `references`                | array                               | Per-node additional references. See [§15](#additional-references).                     |
-| `generatedEvents`           | array of EventType reference        | See [§16](#events).                                                                    |
-| `eventSources`              | array of browse path                | Materialised as `HasEventSource` references.                                           |
-| `eventSourceOf`             | browse path                         | Inverse of `eventSources`.                                                             |
-| `subtypes`                  | array of ObjectType / VariableType  | Inline subtypes. See [§9.5](#inline-subtypes).                                         |
+| `generatedEvents`           | array of EventType reference        | ObjectTypes and state machines. See [§16](#events).                                    |
+| `eventSources`              | array of browse path                | `HasEventSource` to each of the type's own members. See [§16](#events).               |
 
 `specRef` is a link into the specification text that defines the node, such as
 `https://reference.opcfoundation.org/Machinery/v104/docs/8.2`. It applies to every
@@ -705,13 +757,6 @@ objectTypes:
 An ObjectType **MAY** declare a `defaultInstanceBrowseName`. When this type
 is consumed as an [Add-In](#add-ins) with no explicit `browseName`, the
 processor **MUST** use the default to name the instantiated child.
-
-### Inline subtypes
-
-An ObjectType or VariableType **MAY** declare an inline `subtypes` array.
-Each entry is a full Type definition whose `subtypeOf` defaults to the
-enclosing type. This convenience is equivalent to declaring the subtypes at
-the document root with explicit `subtypeOf`.
 
 ## Modelling Rules and Optionals
 
@@ -988,7 +1033,7 @@ additionally declare any of:
 
 | Property                                                    | Notes                                                                                                                         |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `nodeId`                                                    | Explicit string NodeId; see [§5.4](#nodeid-assignment).                                                                       |
+| `nodeId`                                                    | Explicit string NodeId; the nodes below derive theirs from it. See [§5.4](#nodeid-assignment).                                |
 | `description`, `displayName`                                | Localized text overrides.                                                                                                     |
 | `optionals`                                                 | Inherited optional members to instantiate.                                                                                    |
 | `interfaces`                                                | InterfaceTypes implemented by this instance.                                                                                  |
@@ -1022,6 +1067,12 @@ Schema `ConnectedObject` definition enforces this with a `oneOf`:
 The value of each connection property is a browse path (absolute, anchored
 or relative). Two top-level instances **MAY** use different connection
 properties.
+
+An instance **MAY** also take its place in the event-notifier hierarchy the
+same way, with browse paths resolved like a connection property:
+`eventSourceOf` names its notifier (a `HasEventSource` from that node to the
+instance) and `eventSources` the nodes it is the notifier of (a
+`HasEventSource` from the instance to each). See [§16](#events).
 
 ### Inline children and overrides
 
@@ -1187,19 +1238,38 @@ objectTypes:
 Event types are declared in the top-level `eventTypes` array; each entry
 has the shape of an ObjectType with default `subtypeOf: ua:BaseEventType`.
 
-The `generatedEvents` property of any Type lists the event types it raises;
+The `generatedEvents` property of an ObjectType (and so of an EventType or an
+InterfaceType, which share its shape) or of a state machine lists the event
+types it raises;
 the processor **MUST** emit a `GeneratesEvent` reference for each entry.
-The `eventSources` / `eventSourceOf` properties materialise
-`HasEventSource` references.
+`eventSources` and `eventSourceOf` build the event-notifier hierarchy
+([OPC 10000-3] §7.17), one `HasEventSource` reference per entry. On an
+ObjectType, `eventSources` names the type's own members (`/Motor`), and
+instantiation carries the references to each instance. On an instance,
+`eventSources` and `eventSourceOf` take browse paths resolved like
+`organizedBy`. `eventSourceOf` **MUST NOT** appear on a type: a type node is
+the event source of nothing.
 
-```yaml title="Example 14 — event source declaration"
+```yaml title="Example 14 — events and event sources"
 objectTypes:
   - browseName: MyObjectType
     generatedEvents:
       - MyEventType
+  - browseName: PlantType
+    components:
+      - browseName: Pump
+        typeDefinition: MyObjectType
+    eventSources:
+      - /Pump
 
 eventTypes:
   - browseName: MyEventType
+
+instances:
+  - browseName: Plant1
+    typeDefinition: PlantType
+    organizedBy: /ua:Objects
+    eventSourceOf: /ua:Objects/ua:Server
 ```
 
 ## State Machines
@@ -1220,6 +1290,7 @@ declare:
 
 A state machine **MAY** additionally declare `subtypeOf`, `isAbstract`,
 `transitionHaveEffect` (the EventType raised on each transition),
+`generatedEvents`,
 `components`, `methods` (e.g. the Start, Suspend, Resume, Halt and Reset
 methods of a ProgramStateMachine) and `promotedToMandatory`.
 
@@ -1294,8 +1365,12 @@ The `initializers` array declares default values for existing variables,
 identified by `variable` (a browse path, in which `.` **MAY** replace `/` to
 reach a `HasProperty` child, as in `di:ParameterSet/Temperature.ua:EngineeringUnits`).
 Each entry **MUST** declare
-`variable` and `value`; `engineeringUnits`, `range` and `description` are
-optional and apply only to AnalogItem-like variables.
+`variable` and `value`. It **MAY** also declare `description`, which sets the
+Description attribute of that Variable (every OPC UA node has one), and, on
+an AnalogItem-like Variable, `engineeringUnits` and `range`, which set its
+EngineeringUnits and EURange properties. An initializer takes no other key.
+Initializers run after materialisation, so an initializer's `description`
+replaces one set by an inline override of the same member.
 
 An `initializers` block **MAY** appear on an instance, where `variable` is a
 path relative to that instance, or at the top level of the document, where
